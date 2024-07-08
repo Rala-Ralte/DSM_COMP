@@ -97,3 +97,31 @@ def get_grad_eigs (feats, modality, grad, device = "cpu", how_many = None):
         fev = torch.cat( ( torch.zeros(1).to(device), fev, torch.zeros(1).to(device)  ) )
     
     return torch.abs(fev)
+
+
+def get_grad_cam_eigs (feats, modality, grad, cam, device = "cpu", how_many = None):
+    fev = get_eigs(feats, modality, how_many)
+    n_feats = fev.size(0)
+    if n_feats == grad.size(2) - 1: #images
+        grad = grad[:, :, 1:, 1:]
+    elif modality == "text": #text
+        grad = grad[:, :, 1:-1, 1:-1]
+        fev = fev[1:-1]
+
+    if n_feats == cam.size(2) - 1: #images
+        cam = cam[:, :, 1:, 1:]
+    elif modality == "text": #text
+        cam = cam[:, :, 1:-1, 1:-1]
+
+    cam = avg_heads(cam, grad)
+    fev = fev.to(device)
+    fev = cam @ fev.unsqueeze(1)
+    fev = fev[:, 0]
+    if modality == "text":
+        fev = torch.cat( ( torch.zeros(1).to(device), fev, torch.zeros(1).to(device) ) )
+
+    return torch.abs(fev)
+
+
+ 
+

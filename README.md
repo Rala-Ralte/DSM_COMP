@@ -92,6 +92,7 @@ AUC scores for perturbations tests on METER: Lower AUC for positive tests and hi
 
 - Implementation of baselines is based on [Relevance Maps](https://github.com/hila-chefer/Transformer-MM-Explainability)
 - Core DSM implementation is based on [Deep Spectral Methods for unsupervised localisation and segmentation](https://github.com/lukemelas/deep-spectral-segmentation)
+- Implementation of METER is based on [METER](https://github.com/zdou0830/METER)
 
 
 

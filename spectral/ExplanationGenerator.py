@@ -14,7 +14,7 @@ from scipy.stats import skew
 # from sentence_transformers import SentenceTransformer
 # from torch.nn import CosineSimilarity as CosSim
 
-from spectral.get_fev import get_eigs, get_grad_eigs, avg_heads
+from spectral.get_fev import get_eigs, get_grad_eigs, avg_heads, get_grad_cam_eigs
 
 
 class GeneratorOurs:
@@ -54,18 +54,12 @@ class GeneratorOurs:
 
 
 
-
     def generate_ours_dsm_grad_cam(self, image_feat_list, text_feat_list, how_many = 5, device = "cpu"):
         fevs = []
         for i, feats in enumerate(image_feat_list):
-            fev = get_eigs(feats, "image", how_many, device)
-            grad = self.model.cross_modal_image_layers[i].attention.self.get_attn_gradients().detach()[:, :, 1:, 1:]
-            cam = self.model.cross_modal_image_layers[i].attention.self.get_attention_map().detach()[:, :, 1:, 1:]
-            cam = avg_heads(cam, grad)
-
-            fev = fev.to(device)
-            fev = cam @ fev.unsqueeze(1)
-            fev = fev[:, 0]
+            grad = self.model.cross_modal_image_layers[i].attention.self.get_attn_gradients().detach()
+            cam = self.model.cross_modal_image_layers[i].attention.self.get_attention_map().detach()
+            fev = get_grad_cam_eigs(feats, "image", grad, cam, device, how_many)
             fevs.append( torch.abs(fev) )
 
         image_rel = torch.stack(fevs, dim=0).sum(dim=0)
@@ -73,17 +67,9 @@ class GeneratorOurs:
 
         fevs = []
         for i, feats in enumerate(text_feat_list):
-            fev = get_eigs(feats, "text", how_many, device)
-            fev = fev[1:-1]
-
-            grad = self.model.cross_modal_text_layers[i].attention.self.get_attn_gradients().detach()[:, :, 1:-1, 1:-1]
-            cam = self.model.cross_modal_text_layers[i].attention.self.get_attention_map().detach()[:, :, 1:-1, 1:-1]
-            cam = avg_heads(cam, grad)
-
-            fev = fev.to(device)
-            fev = cam @ fev.unsqueeze(1)
-            fev = fev[:, 0]
-            fev = torch.cat( ( torch.zeros(1).to(device), fev, torch.zeros(1).to(device) ) )
+            grad = self.model.cross_modal_text_layers[i].attention.self.get_attn_gradients().detach()
+            cam = self.model.cross_modal_text_layers[i].attention.self.get_attention_map().detach()
+            fev = get_grad_cam_eigs(feats, "text", grad, cam, device, how_many)
             fevs.append( torch.abs(fev) )
         
         
