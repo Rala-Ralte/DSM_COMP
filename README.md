@@ -12,8 +12,8 @@ The job of our interpretability module is to highlight the regions of image and 
 ## Demo
 
 ```bash
-git clone https://github.com/shiv2110/METER.git
-cd METER
+git clone https://github.com/shiv2110/METER-spectral-interpretability.git
+cd METER-spectral-interpretability
 pip install -r requirements.txt
 ```
 
