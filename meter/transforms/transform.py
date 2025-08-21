@@ -92,8 +92,8 @@ def clip_transform_randaug(size):
         ToTensor(),
         Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
     ])
-    trs.transforms.insert(0, lambda image: image.convert('RGBA'))
     trs.transforms.insert(0, RandAugment(2, 9))
-    trs.transforms.insert(0, lambda image: image.convert('RGB'))
+    trs.transforms.insert(1, lambda image: image.convert('RGBA'))
+    trs.transforms.insert(2, lambda image: image.convert('RGB'))
     return trs
 
