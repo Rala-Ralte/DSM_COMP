@@ -24,6 +24,7 @@ from meter.modules.layers import *
 from meter.config import ex
 import demo_vqa_ours as demo_vqa_ours
 import demo_vqa_baselines as demo_vqa_baselines
+from vqa_data import VQATorchDataset  # For accessing dataset with embeddings
 # import demo_vqa
 
 from meter.transforms import vit_transform, clip_transform, clip_transform_randaug
@@ -552,140 +553,90 @@ class METERTransformerSS(pl.LightningModule):
 # if __name__ == '__main__':
 # @ex.main
 def main1(_config):
-    print("HEREEEE")
-    # model_pert = ModelPert(args.COCO_path, use_lrp=True)
-    # ours = GeneratorOurs(model_pert)
-    # baselines = GeneratorBaselines(model_pert)
-    # oursNoAggAblation = GeneratorOursAblationNoAggregation(model_pert)
-    COCO_path = _config['COCO_path']
-    model_pert = METERTransformerSS(_config, COCO_path)
-    model_pert.setup("test")
-    model_pert.eval()
-    # model.zero_grad()
-
-    # args1 = _config['args']
-
+    # Initialize dataset for embedding access
+    dataset = VQATorchDataset(vqa_data.VQADataset(splits="valid"))
+    model = METERTransformerSS(_config, _config["COCO_val_path"])
+    model.setup("test")
+    model.eval()
     device = "cuda:0" if _config["num_gpus"] > 0 else "cpu"
-    model_pert.to(device)
-    vqa_dataset = vqa_data.VQADataset(splits="valid")
-    vqa_answers = utils.get_data(VQA_URL)
-    # method_name = args.method #baka
+    model.to(device)
+    tokenizer = model.tokenizer
 
+    COCO_path = _config["COCO_val_path"]
+    iterator = tqdm(enumerate(dataset), total=len(dataset))
+    method_name = _config.get("method_name", "dsm_grad")  # Default to existing method
+    modality = _config.get("modality", "image")  # Default to image perturbation
+    is_positive_pert = _config.get("is_positive_pert", True)  # Default to positive perturbation
 
-    items = vqa_dataset.data
-    random.seed(1234)
-    r = list(range(len(items)))
-    random.shuffle(r)
-    # pert_samples_indices = r[:args.num_samples] #baka
-    pert_samples_indices = r[:3303]
+    for index, item in iterator:
+        item['img_id'] = COCO_path + item['img_id']
+        _config_copy = copy.deepcopy(_config)
 
-    iterator = tqdm([vqa_dataset.data[i] for i in pert_samples_indices])
+        if method_name == "attn_gradcam":
+            text_relevance, image_relevance = demo_vqa_baselines.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            image_relevance = torch.cat((torch.zeros(1).to(device), image_relevance))
 
-    # test_type = "positive" if args.is_positive_pert else "negative" #baka
-    # modality = "text" if args1.is_text_pert else "image" #baka
-
-    test_type = _config["test_type"]
-    method_name = _config["method_name"]
-    is_positive_pert = _config["is_positive_pert"]
-    modality = _config["modality"]
-
-    # test_type = sys.argv[2]
-    # method_name = sys.argv[1]
-    # is_positive_pert = sys.argv[4]
-    # modality = sys.argv[3]
-
-    print("running {0} pert test for {1} modality with method {2}".format(test_type, modality, method_name))
-
-    for index, item in enumerate(iterator):
-
-        # if method_name == 'attn_gradcam':
-            # R_t_t, R_t_i = baselines.generate_attn_gradcam(item)
-
-        # elif method_name == 'raw_attn':
-            # R_t_t, R_t_i = baselines.generate_raw_attn(item)
-
-        # elif method_name == 'rollout':
-            # R_t_t, R_t_i = baselines.generate_rollout(item)
-
-        if method_name == "rm":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_baselines.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
-
+        elif method_name == "rollout":
+            text_relevance, image_relevance = demo_vqa_baselines.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            image_relevance = torch.cat((torch.zeros(1).to(device), image_relevance))
 
         elif method_name == "raw_attn":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_baselines.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
-
-
-        elif method_name == "attn_gradcam":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_baselines.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
-
-    
-        elif method_name == "rollout":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_baselines.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
-
+            text_relevance, image_relevance = demo_vqa_baselines.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            image_relevance = torch.cat((torch.zeros(1).to(device), image_relevance))
 
         elif method_name == "transformer_attr":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_baselines.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
-
+            text_relevance, image_relevance = demo_vqa_baselines.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            image_relevance = torch.cat((torch.zeros(1).to(device), image_relevance))
 
         elif method_name == "dsm_grad":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_ours.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
-
+            text_relevance, image_relevance = demo_vqa_ours.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            image_relevance = torch.cat((torch.zeros(1).to(device), image_relevance))
 
         elif method_name == "dsm_grad_cam":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_ours.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
-
+            text_relevance, image_relevance = demo_vqa_ours.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            image_relevance = torch.cat((torch.zeros(1).to(device), image_relevance))
 
         elif method_name == "dsm":
-            item['img_id'] = COCO_path + item['img_id']
-            R_t_t, R_t_i = demo_vqa_ours.main1(_config, item, model=model_pert, is_pert=True, viz=False, tokenizer=model_pert.tokenizer)
-            R_t_i = torch.cat((torch.zeros(1).to(device), R_t_i))
+            text_relevance, image_relevance = demo_vqa_ours.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            image_relevance = torch.cat((torch.zeros(1).to(device), image_relevance))
 
-        # elif method_name == "dsm_grad_cam":
-            # R_t_t, R_t_i = ours.generate_ours_dsm_grad_cam(item)
+        elif method_name == "spectral_decompx":
+            # New hybrid method
+            _config_copy["method_name"] = "spectral_decompx"
+            _config_copy["decompx_variant"] = _config.get("decompx_variant", "grad")  # Configurable
+            _config_copy["target_class"] = _config.get("target_class", None)  # Optional
+            text_relevance, image_relevance = demo_vqa_ours.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            # No need to cat zeros; relevance is already per-token
 
+        elif method_name == "decompx":
+            # New DecompX baseline
+            _config_copy["method_name"] = "decompx"
+            _config_copy["target_class"] = _config.get("target_class", None)  # Optional
+            text_relevance, image_relevance = demo_vqa_baselines.main1(_config_copy, item, model=model, is_pert=True, viz=False, tokenizer=tokenizer, dataset=dataset)
+            # No need to cat zeros; relevance is already per-token
 
         else:
             print("Please enter a valid method name")
             return
-        
-        # if method_name == 'dsm' or method_name == 'dsm_grad_cam' or method_name == 'dsm_grad':
-        cam_image = R_t_i
-        cam_text = R_t_t
-        # else:
-            # cam_image = R_t_i[0]
-            # cam_text = R_t_t[0]
+
+        cam_image = image_relevance
+        cam_text = text_relevance
 
         cam_image = (cam_image - cam_image.min()) / (cam_image.max() - cam_image.min())
         cam_text = (cam_text - cam_text.min()) / (cam_text.max() - cam_text.min())
         if modality == "text":
-            curr_pert_result = model_pert.perturbation_text(item, cam_image, cam_text, is_positive_pert)
+            curr_pert_result = model.perturbation_text(item, cam_image, cam_text, is_positive_pert)
         else:
-            curr_pert_result = model_pert.perturbation_image(item, cam_image, cam_text, is_positive_pert)
-        curr_pert_result = [round(res / (index+1) * 100, 2) for res in curr_pert_result]
+            curr_pert_result = model.perturbation_image(item, cam_image, cam_text, is_positive_pert)
+        curr_pert_result = [round(res / (index + 1) * 100, 2) for res in curr_pert_result]
         iterator.set_description("Acc: {}".format(curr_pert_result))
-        
-        del R_t_t, R_t_i
+
+        del text_relevance, image_relevance
         gc.collect()
         torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
     @ex.automain
-    # main()
-    # print("hello")
     def main(_config):
         main1(_config)
