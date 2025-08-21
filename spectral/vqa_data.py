@@ -149,6 +149,50 @@ class VQATorchDataset(Dataset):
         else:
             return ques_id, feats, boxes, ques
 
+    def get_item_with_embeddings(self, item: int, model=None):
+        # Optional method to return embeddings if model provides them
+        # Requires model with embedding layer access (e.g., LXMERT)
+        datum = self.data[item]
+        ques_id = datum['question_id']
+        ques = datum['sent']
+
+        # Get image info
+        img_info = self.imgid2img[datum['img_id']]
+        obj_num = img_info['num_boxes']
+        feats = img_info['features'].copy()
+        boxes = img_info['boxes'].copy()
+        assert obj_num == len(boxes) == len(feats)
+
+        # Normalize boxes
+        img_h, img_w = img_info['img_h'], img_info['img_w']
+        boxes = boxes.copy()
+        boxes[:, (0, 2)] /= img_w
+        boxes[:, (1, 3)] /= img_h
+        np.testing.assert_array_less(boxes, 1+1e-5)
+        np.testing.assert_array_less(-boxes, 0+1e-5)
+
+        # Compute embeddings if model provided
+        if model is not None:
+            # Assume model has embed method or hook (e.g., LXMERT's embed_text, embed_image)
+            try:
+                text_emb = model.embed_text(ques)  # (seq_len, hidden)
+                image_emb = model.embed_image(feats, boxes)  # (num_boxes, hidden)
+            except AttributeError:
+                raise ValueError("Model must have embed_text and embed_image methods or hooks for embeddings.")
+        else:
+            text_emb = None
+            image_emb = None
+
+        # Provide label if available
+        if 'label' in datum:
+            label = datum['label']
+            target = torch.zeros(self.raw_dataset.num_answers)
+            for ans, score in label.items():
+                target[self.raw_dataset.ans2label[ans]] = score
+            return ques_id, feats, boxes, ques, target, text_emb, image_emb
+        else:
+            return ques_id, feats, boxes, ques, text_emb, image_emb
+
 
 class VQAEvaluator:
     def __init__(self, dataset: VQADataset):
